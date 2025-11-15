@@ -1,3 +1,8 @@
+import streamlit as st
+import pandas as pd
+
+st.title("OptiLayer v0.4 - Notion DB Cleaner")
+
 # === FILE UPLOAD (CSV + XLSX) ===
 uploaded_file = st.file_uploader("Upload CSV or XLSX", type=["csv", "xlsx"])
 
