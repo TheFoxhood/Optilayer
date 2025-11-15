@@ -155,4 +155,9 @@ if uploaded_file:
 
     # === DOWNLOAD ===
     csv_out = st.session_state.clean_df.to_csv(index=False).encode()
-    st.download_button("Download Clean
+    st.download_button("Download Clean CSV", csv_out, "dforge_clean.csv", "text/csv")
+
+# === GUMROAD CTA ===
+st.markdown("---")
+st.markdown("### [Get dForge Pro - $49 → AI + Apply + Export](https://mint2bmerry.gumroad.com/l/dforge)")
+st.caption("Built by @Mint2BMerry | Nov 15, 2025")
