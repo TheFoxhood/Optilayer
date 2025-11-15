@@ -10,10 +10,25 @@ st.title("OptiLayer v0.5 - Notion DB Cleaner")
 uploaded_file = st.file_uploader("Upload CSV or XLSX", type=["csv", "xlsx"])
 
 if uploaded_file:
-    if uploaded_file.name.endswith('.csv'):
-        df = pd.read_csv(uploaded_file)
-    else:
-        df = pd.read_excel(uploaded_file)
+    try:
+        if uploaded_file.name.endswith('.csv'):
+            # Robust CSV parsing
+            df = pd.read_csv(uploaded_file, on_bad_lines='skip', engine='python')
+        else:
+            df = pd.read_excel(uploaded_file)
+        
+        if df.empty:
+            st.error("File is empty or unreadable.")
+            st.stop()
+            
+        # Initialize clean state
+        if 'clean_df' not in st.session_state:
+            st.session_state.clean_df = df.copy()
+        df = st.session_state.clean_df
+        
+    except Exception as e:
+        st.error(f"File parse error: {e}")
+        st.stop()
     
     # Initialize session state
     if 'clean_df' not in st.session_state:
@@ -22,6 +37,10 @@ if uploaded_file:
 
     st.write("### Original Data")
     st.dataframe(df)
+
+    # === DEBUG PREVIEW ===
+    st.write("### Raw Data (First 5 rows)")
+    st.dataframe(df.head())
 
     # === METRICS ===
     total = len(df)
