@@ -1,8 +1,10 @@
 import streamlit as st
 import pandas as pd
+import anthropic
 import json
 
-st.title("OptiLayer v0.4 - Notion DB Cleaner")
+
+st.title("OptiLayer v0.5 - Notion DB Cleaner")
 
 # === FILE UPLOAD (CSV + XLSX) ===
 uploaded_file = st.file_uploader("Upload CSV or XLSX", type=["csv", "xlsx"])
@@ -34,24 +36,25 @@ if uploaded_file:
         st.rerun()
 
     # === AI FIXES ===
-    if st.button("Generate AI Fixes"):
-        with st.spinner("Analyzing..."):
-            try:
-                import anthropic
-                client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
-                sample = df.head(5).to_csv(index=False)
-                prompt = f"Analyze:\n{sample}\nSuggest 3 Pandas fixes. JSON only."
-                response = client.messages.create(
-                    model="claude-3-haiku-20240307",
-                    max_tokens=300,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                fixes = json.loads(response.content[0].text.strip())["fixes"]
-                
-                st.session_state.fixes = fixes
-                st.rerun()
-            except Exception as e:
-                st.error(f"AI error: {e}")
+if st.button("Generate AI Fixes"):
+    with st.spinner("Analyzing..."):
+        try:
+            client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
+            sample = df.head(5).to_csv(index=False)
+            prompt = f"Analyze:\n{sample}\nSuggest 3 Pandas fixes. JSON only."
+            response = client.messages.create(
+                model="claude-3-haiku-20240307",
+                max_tokens=300,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            ai_output = response.content[0].text.strip()
+            start = ai_output.find('{')
+            end = ai_output.rfind('}') + 1
+            fixes = json.loads(ai_output[start:end]).get("fixes", [])
+            st.session_state.fixes = fixes
+            st.rerun()
+        except Exception as e:
+            st.error(f"AI error: {e}")
 
     # === APPLY FIXES ===
     if 'fixes' in st.session_state:
