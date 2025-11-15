@@ -31,32 +31,34 @@ if uploaded_file:
             mime="text/csv"
         )
 
-  # === REAL AI + 1-CLICK APPLY (v0.4) ===
-    if st.button("Generate AI Fixes"):
+   # === REAL AI + 1-CLICK APPLY (v0.4) ===
+if st.button("Generate AI Fixes"):
     with st.spinner("Analyzing with AI..."):
         try:
             import anthropic
             client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
             
+            # Sample CSV for prompt (first 5 rows)
             sample_csv = df.head(5).to_csv(index=False)
             
             prompt = f"""
             Analyze this Notion CSV schema and data:
             {sample_csv}
             
-            Suggest 3 actionable Pandas code fixes for optimization.
+            Suggest 3 actionable Pandas code fixes for optimization (e.g., merge columns, fill empties).
             Return JSON only:
             {{
                 "fixes": [
-                    {{"id": 1, "title": "Merge Name columns", "action": "df['Full Name'] = df['First Name'].fillna('') + ' ' + df['Last Name'].fillna('')"}},
-                    {{"id": 2, "title": "Fill missing emails", "action": "df['Email'].fillna('unknown@example.com', inplace=True)"}},
-                    {{"id": 3, "title": "Parse dates", "action": "df['Date'] = pd.to_datetime(df['Date'], errors='coerce')"}}
+                    {{"id": 1, "title": "Fix suggestion 1", "action": "df['NewCol'] = df['Col1'] + ' ' + df['Col2']"}},
+                    {{"id": 2, "title": "Fix suggestion 2", "action": "df['Email'].fillna('unknown@example.com', inplace=True)"}},
+                    {{"id": 3, "title": "Fix suggestion 3", "action": "df['Date'] = pd.to_datetime(df['Date'])"}},
+                    ...
                 ]
             }}
             """
             
             response = client.messages.create(
-                model="claude-3-5-sonnet-20241022",  # ← FIXED
+                model="claude-3-5-sonnet-20241022-v1:0",  # Or haiku for speed
                 max_tokens=400,
                 messages=[{"role": "user", "content": prompt}]
             )
@@ -74,13 +76,15 @@ if uploaded_file:
                     with col2:
                         if st.button("Apply", key=f"apply_{fix['id']}"):
                             try:
-                                exec(fix["action"])
+                                exec(fix['action'])
                                 st.success(f"Applied: {fix['title']}")
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Apply failed: {e}")
             else:
-                st.warning("No fixes suggested.")
+                st.warning("No fixes suggested—data looks clean!")
                 
+        except KeyError:
+            st.error("API key not found. Check .streamlit/secrets.toml")
         except Exception as e:
-            st.error(f"AI error: {e}")
+            st.error(f"AI error: {e}. Check key or network.")
