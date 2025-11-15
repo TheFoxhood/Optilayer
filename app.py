@@ -56,7 +56,7 @@ if uploaded_file:
                 """
                 
                 response = client.messages.create(
-                    model="claude-3-5-sonnet-latest",  # ← FIXED: No -v1:0
+                    model="claude-3-haiku-20240307",  # ← FIXED: No -v1:0
                     max_tokens=400,
                     messages=[{"role": "user", "content": prompt}]
                 )
