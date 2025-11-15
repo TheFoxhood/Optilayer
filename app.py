@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import anthropic
 import json
-
+import csv
 
 st.title("OptiLayer v0.5 - Notion DB Cleaner")
 
@@ -12,14 +12,25 @@ uploaded_file = st.file_uploader("Upload CSV or XLSX", type=["csv", "xlsx"])
 if uploaded_file:
     try:
         if uploaded_file.name.endswith('.csv'):
-            # Robust CSV parsing
-            df = pd.read_csv(uploaded_file, on_bad_lines='skip', engine='python')
+            # Warn on bad lines, don't crash
+            df = pd.read_csv(uploaded_file, on_bad_lines='warn', engine='python', quoting=csv.QUOTE_MINIMAL)
         else:
             df = pd.read_excel(uploaded_file)
         
         if df.empty:
-            st.error("File is empty or unreadable.")
+            st.error("File is empty.")
             st.stop()
+            
+        st.session_state.clean_df = df.copy()
+        
+        with st.expander("Debug: Raw CSV"):
+            uploaded_file.seek(0)
+            st.code(uploaded_file.read().decode("utf-8", errors="ignore")[:500])
+        
+    except Exception as e:
+        st.error(f"Parse error: {e}")
+        st.error("Fix: Quote fields with commas. Example: \"Charlie, Jr\"")
+        st.stop()
             
         # Initialize clean state
         if 'clean_df' not in st.session_state:
