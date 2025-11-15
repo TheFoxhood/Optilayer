@@ -64,53 +64,71 @@ if uploaded_file:
         st.success("Raw data scrubbed: empties dropped, blanks filled.")
         st.rerun()
 
-    # === AI FIXES ===
+    # === AI FIXES (v0.6 — DYNAMIC) ===
     if st.button("Generate AI Fixes"):
-        with st.spinner("Analyzing with AI..."):
+        with st.spinner("Claude is analyzing your data..."):
             try:
                 client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
-                sample = df.head(5).to_csv(index=False)
+                
+                # Send REAL data + schema
+                sample = st.session_state.clean_df.head(10).to_csv(index=False)
+                columns = list(st.session_state.clean_df.columns)
+                
                 prompt = f"""
-                Analyze this Notion CSV:
+                You are a senior data engineer. Analyze this real Notion CSV:
+                
+                Data sample:
                 {sample}
                 
-                Suggest 3 actionable Pandas fixes (e.g., merge, fill, parse).
+                Columns: {columns}
+                
+                Suggest 3 **actionable Pandas fixes** that:
+                - Merge, clean, or reformat
+                - Are safe to run
+                - Use only existing columns
+                
                 Return JSON only:
-                {{"fixes": [
-                    {{"id": 1, "title": "Merge Name columns", "action": "df['Full Name'] = df['First Name'].fillna('') + ' ' + df['Last Name'].fillna('')"}},
-                    {{"id": 2, "title": "Fill missing emails", "action": "df['Email'].fillna('unknown@example.com', inplace=True)"}},
-                    {{"id": 3, "title": "Parse dates", "action": "df['Date'] = pd.to_datetime(df['Date'], errors='coerce')"}}
-                ]}}
+                {{
+                    "fixes": [
+                        {{"id": 1, "title": "Merge 'Name' into 'Full Name'", "action": "df['Full Name'] = df['Name']"}},
+                        {{"id": 2, "title": "Parse 'Date' to datetime", "action": "df['Date'] = pd.to_datetime(df['Date'], errors='coerce')"}},
+                        {{"id": 3, "title": "Fill missing 'Status'", "action": "df['Status'].fillna('Unknown', inplace=True)"}}
+                    ]
+                }}
                 """
+                
                 response = client.messages.create(
                     model="claude-3-haiku-20240307",
-                    max_tokens=300,
+                    max_tokens=400,
                     messages=[{"role": "user", "content": prompt}]
                 )
-                ai_output = response.content[0].text.strip()
-                start = ai_output.find('{')
-                end = ai_output.rfind('}') + 1
-                fixes = json.loads(ai_output[start:end]).get("fixes", [])
+                
+                raw = response.content[0].text.strip()
+                start = raw.find('{')
+                end = raw.rfind('}') + 1
+                fixes = json.loads(raw[start:end])["fixes"]
+                
                 st.session_state.fixes = fixes
                 st.rerun()
+                
             except Exception as e:
                 st.error(f"AI error: {e}")
 
-    # === APPLY AI FIXES ===
-    if 'fixes' in st.session_state:
-        st.success("AI Fixes Generated!")
-        for fix in st.session_state.fixes:
-            col1, col2 = st.columns([4, 1])
-            with col1:
-                st.write(f"• {fix['title']}")
-            with col2:
-                if st.button("Apply", key=f"apply_{fix['id']}"):
-                    try:
-                        exec(fix["action"], {}, {"df": st.session_state.clean_df})
-                        st.success(f"Applied: {fix['title']}")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Failed: {e}")
+        # === APPLY FIXES ===
+        if 'fixes' in st.session_state:
+            st.success("AI Fixes Ready!")
+            for fix in st.session_state.fixes:
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    st.write(f"• {fix['title']}")
+                with col2:
+                    if st.button("Apply", key=f"apply_{fix['id']}"):
+                        try:
+                            exec(fix["action"], {}, {"df": st.session_state.clean_df})
+                            st.success("Applied!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed: {e}")
 
     # === LIVE PREVIEW ===
     st.write("### Live Clean Data")
