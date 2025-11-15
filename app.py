@@ -5,10 +5,10 @@ import anthropic
 import json
 import csv
 
-st.set_page_config(page_title="OptiLayer", layout="centered")
-st.title("OptiLayer v0.8 — Notion DB Cleaner")
+st.set_page_config(page_title="dForge", layout="centered")
+st.title("dForge v1.0 — Data Hygiene AI")
 
-# === FILE UPLOAD + SMART REFORMAT (v0.8) ===
+# === FILE UPLOAD + SMART REFORMAT ===
 uploaded_file = st.file_uploader("Upload CSV or XLSX", type=["csv", "xlsx"])
 
 if uploaded_file:
@@ -79,26 +79,27 @@ if uploaded_file:
         st.success("Empties dropped, blanks filled.")
         st.rerun()
 
-    # === AI FIXES (v0.8 — DYNAMIC) ===
+    # === AI FIXES (v1.0 — ALWAYS SUGGESTS) ===
     if st.button("Generate AI Fixes"):
-        with st.spinner("Claude is analyzing your data..."):
+        with st.spinner("dForge AI is analyzing your data..."):
             try:
                 client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
-                
                 sample = st.session_state.clean_df.head(10).to_csv(index=False)
                 columns = list(st.session_state.clean_df.columns)
                 
                 prompt = f"""
-                Analyze this real Notion CSV:
+                You are a data hygiene expert.
+                Analyze this CSV:
                 {sample}
                 Columns: {columns}
                 
                 Suggest 3 actionable Pandas fixes using ONLY existing columns.
+                If data is clean, suggest improvements.
                 Return JSON only:
                 {{"fixes": [
-                    {{"id": 1, "title": "Merge 'Name' into 'Full Name'", "action": "df['Full Name'] = df['Name']"}},
+                    {{"id": 1, "title": "Lowercase emails", "action": "df['Email'] = df['Email'].str.lower().str.strip()"}},
                     {{"id": 2, "title": "Parse 'Date'", "action": "df['Date'] = pd.to_datetime(df['Date'], errors='coerce')"}},
-                    {{"id": 3, "title": "Fill 'Status'", "action": "df['Status'].fillna('Unknown', inplace=True)"}}
+                    {{"id": 3, "title": "Add 'Year' column", "action": "df['Year'] = pd.to_datetime(df['Date']).dt.year"}}
                 ]}}
                 """
                 
@@ -116,8 +117,17 @@ if uploaded_file:
                     st.stop()
                     
                 fixes = json.loads(raw[start:end])["fixes"]
+                
+                if not fixes:
+                    st.warning("Data is clean! Here are enhancements:")
+                    fixes = [
+                        {"id": 1, "title": "Standardize text", "action": "for col in df.select_dtypes(include='object').columns: df[col] = df[col].str.strip()"},
+                        {"id": 2, "title": "Add row ID", "action": "df['Row_ID'] = range(1, len(df)+1)"},
+                        {"id": 3, "title": "Flag duplicates", "action": "df['Is_Dupe'] = df.duplicated(keep=False)"}
+                    ]
+                
                 st.session_state.fixes = fixes
-                st.success("AI Fixes Ready!")
+                st.success(f"AI Generated {len(fixes)} Fixes!")
                 st.rerun()
                 
             except Exception as e:
@@ -125,7 +135,7 @@ if uploaded_file:
 
     # === APPLY AI FIXES ===
     if 'fixes' in st.session_state:
-        st.success("AI Fixes Ready!")
+        st.success(f"AI Fixes Ready ({len(st.session_state.fixes)})")
         for fix in st.session_state.fixes:
             col1, col2 = st.columns([4, 1])
             with col1:
@@ -145,9 +155,4 @@ if uploaded_file:
 
     # === DOWNLOAD ===
     csv_out = st.session_state.clean_df.to_csv(index=False).encode()
-    st.download_button("Download Clean CSV", csv_out, "clean_notion_db.csv", "text/csv")
-
-# === GUMROAD CTA ===
-st.markdown("---")
-st.markdown("### [Get Pro - $49 → AI + Apply + Export](https://mint2bmerry.gumroad.com/l/optilayer)")
-st.caption("Built by @Mint2BMerry | Nov 15, 2025")
+    st.download_button("Download Clean
