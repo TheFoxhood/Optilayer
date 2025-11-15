@@ -114,21 +114,52 @@ if uploaded_file:
             except Exception as e:
                 st.error(f"AI error: {e}")
 
-        # === APPLY FIXES ===
-        if 'fixes' in st.session_state:
-            st.success("AI Fixes Ready!")
-            for fix in st.session_state.fixes:
-                col1, col2 = st.columns([4, 1])
-                with col1:
-                    st.write(f"• {fix['title']}")
-                with col2:
-                    if st.button("Apply", key=f"apply_{fix['id']}"):
-                        try:
-                            exec(fix["action"], {}, {"df": st.session_state.clean_df})
-                            st.success("Applied!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Failed: {e}")
+        # === AI FIXES (v0.7 — BULLETPROOF) ===
+        if st.button("Generate AI Fixes"):
+            with st.spinner("Claude is analyzing your data..."):
+                try:
+                    client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
+                    
+                    sample = st.session_state.clean_df.head(10).to_csv(index=False)
+                    columns = list(st.session_state.clean_df.columns)
+                    
+                    prompt = f"""
+                    Analyze this real Notion CSV:
+                    {sample}
+                    Columns: {columns}
+                    
+                    Suggest 3 actionable Pandas fixes using ONLY existing columns.
+                    Return JSON only:
+                    {{"fixes": [
+                        {{"id": 1, "title": "Merge 'Name' into 'Full Name'", "action": "df['Full Name'] = df['Name']"}},
+                        {{"id": 2, "title": "Parse 'Date'", "action": "df['Date'] = pd.to_datetime(df['Date'], errors='coerce')"}},
+                        {{"id": 3, "title": "Fill 'Status'", "action": "df['Status'].fillna('Unknown', inplace=True)"}}
+                    ]}}
+                    """
+                    
+                    response = client.messages.create(
+                        model="claude-3-haiku-20240307",
+                        max_tokens=400,
+                        messages=[{"role": "user", "content": prompt}]
+                    )
+                    
+                    raw = response.content[0].text.strip()
+                    st.write("Raw AI Output:", raw)  # DEBUG
+                    
+                    start = raw.find('{')
+                    end = raw.rfind('}') + 1
+                    if start == -1 or end == 0:
+                        st.error("AI returned invalid JSON.")
+                        st.stop()
+                        
+                    fixes = json.loads(raw[start:end])["fixes"]
+                    st.session_state.fixes = fixes
+                    st.success("AI Fixes Ready!")
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"AI error: {e}")
+                    st.write("Debug:", e)
 
     # === LIVE PREVIEW ===
     st.write("### Live Clean Data")
