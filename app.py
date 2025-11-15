@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 
-st.title("OptiLayer v0.3 - Notion DB Cleaner")
+st.title("OptiLayer v0.4 - Notion DB Cleaner")
 
 uploaded_file = st.file_uploader("Upload CSV", type="csv")
 
