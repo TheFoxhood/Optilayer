@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 
-st.title("OptiLayer v0.2 - Notion DB Cleaner")
+st.title("OptiLayer v0.3 - Notion DB Cleaner")
 
 uploaded_file = st.file_uploader("Upload CSV", type="csv")
 
@@ -30,3 +30,15 @@ if uploaded_file:
             file_name="clean_notion_db.csv",
             mime="text/csv"
         )
+
+    # === AI SUGGESTIONS (v0.3) ===
+    if st.button("Generate AI Fixes"):
+        with st.spinner("Thinking..."):
+            # Simulate AI (replace with Claude later)
+            suggestions = [
+                "Merge 'First Name' + 'Last Name' into 'Full Name'?",
+                "Auto-fill 47 missing emails using domain patterns?",
+                "Tag rows with Date > 2025-11-01 as 'Recent'?"
+            ]
+            for s in suggestions:
+                st.write(f"• {s}")
