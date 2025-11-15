@@ -1,90 +1,67 @@
-import streamlit as st
-import pandas as pd
-
-st.title("OptiLayer v0.4 - Notion DB Cleaner")
-
-uploaded_file = st.file_uploader("Upload CSV", type="csv")
+# === FILE UPLOAD (CSV + XLSX) ===
+uploaded_file = st.file_uploader("Upload CSV or XLSX", type=["csv", "xlsx"])
 
 if uploaded_file:
-    df = pd.read_csv(uploaded_file)
+    if uploaded_file.name.endswith('.csv'):
+        df = pd.read_csv(uploaded_file)
+    else:
+        df = pd.read_excel(uploaded_file)
+    
+    # Initialize session state
+    if 'clean_df' not in st.session_state:
+        st.session_state.clean_df = df.copy()
+    df = st.session_state.clean_df  # Always use live state
+
     st.write("### Original Data")
     st.dataframe(df)
 
     # === METRICS ===
     total = len(df)
     dupes = df.duplicated().sum()
-    dupe_rate = dupes / total if total > 0 else 0
-    st.metric("Dupe Rate", f"{dupe_rate:.1%}", f"{dupes} duplicate rows")
+    st.metric("Dupe Rate", f"{dupes/total:.1%}" if total else "0%", f"{dupes} duplicates")
 
     # === 1-CLICK DEDUPE ===
-    if st.button("🧹 Deduplicate Now"):
+    if st.button("Deduplicate Now"):
         clean_df = df.drop_duplicates()
+        st.session_state.clean_df = clean_df
         st.success(f"Cleaned! {len(df) - len(clean_df)} rows removed.")
-        st.dataframe(clean_df)
+        st.rerun()
 
-        # === DOWNLOAD CLEAN CSV ===
-        csv = clean_df.to_csv(index=False).encode()
-        st.download_button(
-            label="⬇️ Download Clean CSV",
-            data=csv,
-            file_name="clean_notion_db.csv",
-            mime="text/csv"
-        )
-
-    # === REAL AI + 1-CLICK APPLY (v0.4) ===
+    # === AI FIXES ===
     if st.button("Generate AI Fixes"):
-        with st.spinner("Analyzing with AI..."):
+        with st.spinner("Analyzing..."):
             try:
                 import anthropic
                 client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
-                
-                sample_csv = df.head(5).to_csv(index=False)
-                
-                prompt = f"""
-                Analyze this Notion CSV:
-                {sample_csv}
-                
-                Suggest 3 actionable Pandas fixes.
-                Return JSON only:
-                {{"fixes": [
-                    {{"id": 1, "title": "Merge Name columns", "action": "df['Full Name'] = df['First Name'].fillna('') + ' ' + df['Last Name'].fillna('')"}},
-                    {{"id": 2, "title": "Fill missing emails", "action": "df['Email'].fillna('unknown@example.com', inplace=True)"}},
-                    {{"id": 3, "title": "Parse dates", "action": "df['Date'] = pd.to_datetime(df['Date'], errors='coerce')"}}
-                ]}}
-                """
-                
+                sample = df.head(5).to_csv(index=False)
+                prompt = f"Analyze:\n{sample}\nSuggest 3 Pandas fixes. JSON only."
                 response = client.messages.create(
-                    model="claude-3-haiku-20240307",  # ← Proven working
+                    model="claude-3-haiku-20240307",
                     max_tokens=300,
                     messages=[{"role": "user", "content": prompt}]
                 )
+                fixes = json.loads(response.content[0].text.strip())["fixes"]
                 
-                import json
-                ai_output = response.content[0].text.strip()
-                start = ai_output.find('{')
-                end = ai_output.rfind('}') + 1
-                fixes = json.loads(ai_output[start:end]).get("fixes", [])
-                
-                # After AI generation
-                if fixes:
-                    st.success("AI Fixes Generated!")
-                    
-                    # Initialize session state
-                    if 'clean_df' not in st.session_state:
-                        st.session_state.clean_df = df.copy()
-                    
-                    for fix in fixes:
-                        col1, col2 = st.columns([4, 1])
-                        with col1:
-                            st.write(f"• {fix['title']}")
-                        with col2:
-                            if st.button("Apply", key=f"apply_{fix['id']}"):
-                                try:
-                                    exec(fix["action"], {}, {"df": st.session_state.clean_df})
-                                    st.success(f"Applied: {fix['title']}")
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"Apply failed: {e}")
+                st.session_state.fixes = fixes
+                st.rerun()
+            except Exception as e:
+                st.error(f"AI error: {e}")
+
+    # === APPLY FIXES ===
+    if 'fixes' in st.session_state:
+        st.success("AI Fixes Generated!")
+        for fix in st.session_state.fixes:
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.write(f"• {fix['title']}")
+            with col2:
+                if st.button("Apply", key=f"apply_{fix['id']}"):
+                    try:
+                        exec(fix["action"], {}, {"df": st.session_state.clean_df})
+                        st.success("Applied!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Failed: {e}")
 
     # === LIVE PREVIEW ===
     st.write("### Live Clean Data")
@@ -92,6 +69,4 @@ if uploaded_file:
 
     # === DOWNLOAD ===
     csv = st.session_state.clean_df.to_csv(index=False).encode()
-    st.download_button("⬇️ Download Clean CSV", csv, "clean_notion_db.csv", "text/csv")
-                
-                
+    st.download_button("Download Clean CSV", csv, "clean_notion_db.csv", "text/csv")
