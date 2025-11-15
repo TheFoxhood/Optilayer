@@ -31,39 +31,60 @@ if uploaded_file:
             mime="text/csv"
         )
 
-    # === REAL AI + 1-CLICK APPLY (v0.4) ===
-    if st.button("Generate AI Fixes"):
-        with st.spinner("Analyzing with AI..."):
-            # Replace with Claude API (get key from anthropic.com)
+   # === REAL AI + 1-CLICK APPLY (v0.4) ===
+if st.button("Generate AI Fixes"):
+    with st.spinner("Analyzing with AI..."):
+        try:
             import anthropic
             client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
             
-            prompt = f"""
-            Analyze this Notion CSV:
-            {df.head(10).to_csv(index=False)}
+            # Sample CSV for prompt (first 5 rows)
+            sample_csv = df.head(5).to_csv(index=False)
             
-            Suggest 3 actionable fixes. Return JSON:
+            prompt = f"""
+            Analyze this Notion CSV schema and data:
+            {sample_csv}
+            
+            Suggest 3 actionable Pandas code fixes for optimization (e.g., merge columns, fill empties).
+            Return JSON only:
             {{
                 "fixes": [
-                    {{"id": 1, "title": "Merge columns", "action": "df['Full Name'] = df['First'] + ' ' + df['Last']"}},
+                    {{"id": 1, "title": "Fix suggestion 1", "action": "df['NewCol'] = df['Col1'] + ' ' + df['Col2']"}},
+                    {{"id": 2, "title": "Fix suggestion 2", "action": "df['Email'].fillna('unknown@example.com', inplace=True)"}},
+                    {{"id": 3, "title": "Fix suggestion 3", "action": "df['Date'] = pd.to_datetime(df['Date'])"}},
                     ...
                 ]
             }}
             """
+            
             response = client.messages.create(
-                model="claude-3-haiku-20240307",
-                max_tokens=300,
+                model="claude-3-5-sonnet-20240620",  # Or haiku for speed
+                max_tokens=400,
                 messages=[{"role": "user", "content": prompt}]
             )
-            import json
-            fixes = json.loads(response.content[0].text)["fixes"]
             
-            for fix in fixes:
-                col1, col2 = st.columns([4, 1])
-                with col1:
-                    st.write(f"• {fix['title']}")
-                with col2:
-                    if st.button("Apply", key=fix["id"]):
-                        exec(fix["action"])
-                        st.success("Applied!")
-                        st.rerun()
+            import json
+            ai_output = json.loads(response.content[0].text)
+            fixes = ai_output.get("fixes", [])
+            
+            if fixes:
+                st.success("AI Fixes Generated!")
+                for fix in fixes:
+                    col1, col2 = st.columns([4, 1])
+                    with col1:
+                        st.write(f"• {fix['title']}")
+                    with col2:
+                        if st.button("Apply", key=f"apply_{fix['id']}"):
+                            try:
+                                exec(fix['action'])
+                                st.success(f"Applied: {fix['title']}")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Apply failed: {e}")
+            else:
+                st.warning("No fixes suggested—data looks clean!")
+                
+        except KeyError:
+            st.error("API key not found. Check .streamlit/secrets.toml")
+        except Exception as e:
+            st.error(f"AI error: {e}. Check key or network.")
