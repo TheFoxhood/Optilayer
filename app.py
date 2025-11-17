@@ -159,5 +159,5 @@ if uploaded_file:
 
 # === GUMROAD CTA ===
 st.markdown("---")
-st.markdown("### [Get dForge Pro - $49 → AI + Apply + Export](https://mint2bmerry.gumroad.com/l/dforge)")
+st.markdown("### [Get dForge → AI + Apply + Export](https://mint2bmerry.gumroad.com/l/dforge)")
 st.caption("Built by @Mint2BMerry | Nov 15, 2025")
