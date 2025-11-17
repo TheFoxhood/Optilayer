@@ -8,26 +8,24 @@ import csv
 st.set_page_config(page_title="dForge", layout="centered")
 st.title("dForge v1.0 — Data Hygiene AI")
 
-# === FILE UPLOAD + MULTI-SESSION (v1.5) ===
+# === FILE UPLOAD + FULL REFRESH (v1.6) ===
 uploaded_file = st.file_uploader("Upload CSV or XLSX", type=["csv", "xlsx"], key="file_uploader")
 
 if uploaded_file:
     try:
-        # === RE-USE SESSION STATE ON RE-UPLOAD ===
-        if 'clean_df' not in st.session_state:
-            st.session_state.clean_df = pd.DataFrame()
-        
-        # Parse new file
         if uploaded_file.name.endswith('.xlsx'):
             df = pd.read_excel(uploaded_file)
         else:
-            raw_lines = uploaded_file.read().decode("utf-8", errors="ignore").splitlines()
-            if not raw_lines:
+            # === SMART CSV PARSER ===
+            raw_text = uploaded_file.read().decode("utf-8", errors="ignore")
+            lines = raw_text.strip().split('\n')
+            if not lines:
                 st.error("Empty file.")
                 st.stop()
-            header = [h.strip('"') for h in raw_lines[0].split(',')]
+                
+            header = [h.strip('"') for h in lines[0].split(',')]
             data = []
-            for line in raw_lines[1:]:
+            for line in lines[1:]:
                 if not line.strip():
                     continue
                 values = line.split(',', len(header)-1)
@@ -39,10 +37,14 @@ if uploaded_file:
             st.error("No data.")
             st.stop()
             
-        # === UPDATE SESSION STATE (PRESERVE HISTORY) ===
+        # === FRESH STATE PER FILE ===
         st.session_state.clean_df = df.copy()
         st.session_state.current_file = uploaded_file.name
         
+        # === CLEAR OLD AI FIXES ===
+        if 'fixes' in st.session_state:
+            del st.session_state.fixes
+            
     except Exception as e:
         st.error(f"Parse error: {e}")
         st.stop()
@@ -50,6 +52,8 @@ if uploaded_file:
 # === SHOW CURRENT FILE ===
 if 'current_file' in st.session_state:
     st.write(f"**Active File**: {st.session_state.current_file}")
+    st.write("### Data Preview")
+    st.dataframe(st.session_state.clean_df.head())
         
     # === DEBUG PANEL ===
     with st.expander("Debug: Raw Input"):
@@ -78,9 +82,9 @@ if 'current_file' in st.session_state:
         st.success("Empties dropped, blanks filled.")
         st.rerun()
 
-    # === AI FIXES (v1.5 — PERSISTENT) ===
-if st.button("Generate AI Fixes", key="gen_ai"):
-    with st.spinner("Analyzing..."):
+   # === AI FIXES (v1.6 — FRESH) ===
+if st.button("Generate AI Fixes"):
+    with st.spinner("Analyzing new data..."):
         try:
             client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
             sample = st.session_state.clean_df.head(5).to_csv(index=False)
@@ -115,6 +119,7 @@ if st.button("Generate AI Fixes", key="gen_ai"):
             st.error(f"AI error: {e}")
 
       # === APPLY FIXES (v1.5) ===
+# === APPLY FIXES (v1.6) ===
 if 'fixes' in st.session_state:
     st.success(f"AI Fixes Ready ({len(st.session_state.fixes)})")
     for fix in st.session_state.fixes:
