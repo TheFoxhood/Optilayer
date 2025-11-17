@@ -8,59 +8,48 @@ import csv
 st.set_page_config(page_title="dForge", layout="centered")
 st.title("dForge v1.0 — Data Hygiene AI")
 
-# === FILE UPLOAD + NUCLEAR CSV PARSER (v1.3) ===
-uploaded_file = st.file_uploader("Upload CSV or XLSX", type=["csv", "xlsx"])
+# === FILE UPLOAD + MULTI-SESSION (v1.5) ===
+uploaded_file = st.file_uploader("Upload CSV or XLSX", type=["csv", "xlsx"], key="file_uploader")
 
 if uploaded_file:
     try:
+        # === RE-USE SESSION STATE ON RE-UPLOAD ===
+        if 'clean_df' not in st.session_state:
+            st.session_state.clean_df = pd.DataFrame()
+        
+        # Parse new file
         if uploaded_file.name.endswith('.xlsx'):
             df = pd.read_excel(uploaded_file)
         else:
-            # === NUCLEAR CSV PARSER ===
             raw_lines = uploaded_file.read().decode("utf-8", errors="ignore").splitlines()
             if not raw_lines:
                 st.error("Empty file.")
                 st.stop()
-                
-            # Parse header
             header = [h.strip('"') for h in raw_lines[0].split(',')]
             data = []
-            
-            for i, line in enumerate(raw_lines[1:], start=2):
+            for line in raw_lines[1:]:
                 if not line.strip():
                     continue
-                values = []
-                current = ""
-                in_quote = False
-                for char in line + ",":
-                    if char == '"':
-                        in_quote = not in_quote
-                    elif char == ',' and not in_quote:
-                        values.append(current.strip('"'))
-                        current = ""
-                    else:
-                        current += char
-                # Append last field
-                if current:
-                    values.append(current.strip('"'))
-                # Truncate/pad to header length
-                if len(values) > len(header):
-                    values = values[:len(header)]
-                elif len(values) < len(header):
-                    values += [''] * (len(header) - len(values))
-                data.append(values)
-            
+                values = line.split(',', len(header)-1)
+                values = [v.strip('"') for v in values]
+                data.append(values[:len(header)])
             df = pd.DataFrame(data, columns=header)
-            
+        
         if df.empty:
-            st.error("No valid data found.")
+            st.error("No data.")
             st.stop()
             
+        # === UPDATE SESSION STATE (PRESERVE HISTORY) ===
         st.session_state.clean_df = df.copy()
+        st.session_state.current_file = uploaded_file.name
         
     except Exception as e:
-        st.error(f"Parse failed: {e}")
+        st.error(f"Parse error: {e}")
         st.stop()
+
+# === SHOW CURRENT FILE ===
+if 'current_file' in st.session_state:
+    st.write(f"**Active File**: {st.session_state.current_file}")
         
     # === DEBUG PANEL ===
     with st.expander("Debug: Raw Input"):
@@ -89,62 +78,43 @@ if uploaded_file:
         st.success("Empties dropped, blanks filled.")
         st.rerun()
 
-     # === AI FIXES (v1.3 — NEVER FAILS) ===
-    if st.button("Generate AI Fixes"):
-        with st.spinner("dForge AI is analyzing..."):
-            try:
-                client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
-                sample = st.session_state.clean_df.head(5).to_csv(index=False)
-                columns = list(st.session_state.clean_df.columns)
-                
-                prompt = f"""
-                Analyze this CSV:
-                {sample}
-                Columns: {columns}
-                
-                Suggest 3 Pandas fixes using ONLY these columns.
-                If data is clean, suggest enhancements.
-                Return JSON only:
-                {{"fixes": [...]}}
-                """
-                
-                response = client.messages.create(
-                    model="claude-3-haiku-20240307",
-                    max_tokens=300,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                
-                raw = response.content[0].text.strip()
-                start = raw.find('{')
-                end = raw.rfind('}') + 1
-                if start == -1 or end == 0:
-                    st.warning("AI returned no fixes — data is clean!")
-                    st.session_state.fixes = [
-                        {"id": 1, "title": "Lowercase text", "action": "for col in df.select_dtypes('object').columns: df[col] = df[col].str.lower()"},
-                        {"id": 2, "title": "Add row ID", "action": "df['Row_ID'] = range(1, len(df)+1)"},
-                        {"id": 3, "title": "Flag duplicates", "action": "df['Is_Dupe'] = df.duplicated(keep=False)"}
-                    ]
-                else:
-                    fixes = json.loads(raw[start:end])["fixes"]
-                    st.session_state.fixes = fixes or [
-                        {"id": 1, "title": "Standardize text", "action": "for col in df.select_dtypes('object').columns: df[col] = df[col].str.strip()"},
-                        {"id": 2, "title": "Add row count", "action": "df['Row_Count'] = len(df)"},
-                        {"id": 3, "title": "Flag empties", "action": "df['Has_Empty'] = df.isna().any(axis=1)"}
-                    ]
-                
-                st.success(f"AI Generated {len(st.session_state.fixes)} Fixes!")
-                st.rerun()
-                
-            except Exception as e:
-                st.error("AI offline. Using fallback fixes.")
-                st.session_state.fixes = [
-                    {"id": 1, "title": "Lowercase all text", "action": "for col in df.select_dtypes('object').columns: df[col] = df[col].str.lower()"},
-                    {"id": 2, "title": "Fill blanks", "action": "df.fillna('UNKNOWN', inplace=True)"},
-                    {"id": 3, "title": "Add index", "action": "df['Index'] = range(1, len(df)+1)"}
-                ]
-                st.rerun()
+    # === AI FIXES (v1.5 — PERSISTENT) ===
+if st.button("Generate AI Fixes", key="gen_ai"):
+    with st.spinner("Analyzing..."):
+        try:
+            client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
+            sample = st.session_state.clean_df.head(5).to_csv(index=False)
+            columns = list(st.session_state.clean_df.columns)
+            
+            prompt = f"""
+            Analyze this CSV:
+            {sample}
+            Columns: {columns}
+            
+            Suggest 3 Pandas fixes using ONLY these columns.
+            Return JSON only:
+            {{"fixes": [...]}}
+            """
+            
+            response = client.messages.create(
+                model="claude-3-haiku-20240307",
+                max_tokens=300,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            
+            raw = response.content[0].text.strip()
+            start = raw.find('{')
+            end = raw.rfind('}') + 1
+            fixes = json.loads(raw[start:end])["fixes"]
+            
+            st.session_state.fixes = fixes
+            st.success(f"AI Generated {len(fixes)} Fixes!")
+            st.rerun()
+            
+        except Exception as e:
+            st.error(f"AI error: {e}")
 
-       # === APPLY AI FIXES (v1.4) ===
+      # === APPLY FIXES (v1.5) ===
 if 'fixes' in st.session_state:
     st.success(f"AI Fixes Ready ({len(st.session_state.fixes)})")
     for fix in st.session_state.fixes:
