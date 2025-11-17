@@ -82,27 +82,54 @@ if 'current_file' in st.session_state:
         st.success("Empties dropped, blanks filled.")
         st.rerun()
 
-   # === AI FIXES (v1.6 — FRESH) ===
+   # === AI FIXES (v1.7 — DEEP ANALYSIS) ===
 if st.button("Generate AI Fixes"):
-    with st.spinner("Analyzing new data..."):
+    with st.spinner("dForge is deeply analyzing your data..."):
         try:
             client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
-            sample = st.session_state.clean_df.head(5).to_csv(index=False)
-            columns = list(st.session_state.clean_df.columns)
+            
+            # === SEND FULL DATA + SCHEMA ===
+            full_csv = st.session_state.clean_df.to_csv(index=False)
+            stats = {
+                "rows": len(st.session_state.clean_df),
+                "columns": list(st.session_state.clean_df.columns),
+                "nulls": st.session_state.clean_df.isna().sum().to_dict(),
+                "dtypes": st.session_state.clean_df.dtypes.apply(lambda x: x.name).to_dict(),
+                "sample": st.session_state.clean_df.head(3).to_csv(index=False)
+            }
             
             prompt = f"""
-            Analyze this CSV:
-            {sample}
-            Columns: {columns}
+            You are a senior data enrichment engineer.
+            Analyze this FULL CSV and metadata:
             
-            Suggest 3 Pandas fixes using ONLY these columns.
+            Full data (up to 1000 rows):
+            {full_csv[:20000]}  # Truncate if huge
+            
+            Metadata:
+            - Rows: {stats['rows']}
+            - Columns: {stats['columns']}
+            - Nulls per column: {stats['nulls']}
+            - Data types: {stats['dtypes']}
+            - Sample:
+            {stats['sample']}
+            
+            Suggest 3 HIGH-VALUE, EXECUTABLE Pandas fixes:
+            1. Clean & standardize (e.g., emails, phones, addresses)
+            2. Enrich (e.g., extract domain, geocode city, add category)
+            3. Structure (e.g., split name, parse date, normalize units)
+            
+            Use ONLY existing columns.
             Return JSON only:
-            {{"fixes": [...]}}
+            {{"fixes": [
+                {{"id": 1, "title": "Standardize emails", "action": "df['Email'] = df['Email'].str.lower().str.strip().str.replace(' ', '')"}},
+                {{"id": 2, "title": "Extract domain", "action": "df['Domain'] = df['Email'].str.split('@').str[-1]"}},
+                {{"id": 3, "title": "Parse full name", "action": "df['First'] = df['Name'].str.split().str[0]; df['Last'] = df['Name'].str.split().str[-1]"}}
+            ]}}
             """
             
             response = client.messages.create(
                 model="claude-3-haiku-20240307",
-                max_tokens=300,
+                max_tokens=600,
                 messages=[{"role": "user", "content": prompt}]
             )
             
@@ -112,14 +139,13 @@ if st.button("Generate AI Fixes"):
             fixes = json.loads(raw[start:end])["fixes"]
             
             st.session_state.fixes = fixes
-            st.success(f"AI Generated {len(fixes)} Fixes!")
+            st.success(f"AI Generated {len(fixes)} High-Value Fixes!")
             st.rerun()
             
         except Exception as e:
             st.error(f"AI error: {e}")
-
-      # === APPLY FIXES (v1.5) ===
-# === APPLY FIXES (v1.6) ===
+            
+ # === APPLY FIXES (v1.7) ===
 if 'fixes' in st.session_state:
     st.success(f"AI Fixes Ready ({len(st.session_state.fixes)})")
     for fix in st.session_state.fixes:
