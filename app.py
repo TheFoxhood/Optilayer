@@ -144,22 +144,22 @@ if uploaded_file:
                 ]
                 st.rerun()
 
-    # === APPLY AI FIXES ===
-    if 'fixes' in st.session_state:
-        st.success(f"AI Fixes Ready ({len(st.session_state.fixes)})")
-        for fix in st.session_state.fixes:
-            col1, col2 = st.columns([4, 1])
-            with col1:
-                st.write(f"• {fix['title']}")
-            with col2:
-                if st.button("Apply", key=f"apply_{fix['id']}"):
-                    try:
-                        exec(fix["action"], {}, {"df": st.session_state.clean_df})
-                        st.success("Applied!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Failed: {e}")
-
+       # === APPLY AI FIXES (v1.4) ===
+if 'fixes' in st.session_state:
+    st.success(f"AI Fixes Ready ({len(st.session_state.fixes)})")
+    for fix in st.session_state.fixes:
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            st.write(f"• {fix['title']}")
+        with col2:
+            if st.button("Apply", key=f"apply_{fix['id']}"):
+                try:
+                    exec(fix["action"], {"pd": pd}, {"df": st.session_state.clean_df})
+                    st.success("Applied!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed: {e}")
+                    
     # === LIVE PREVIEW ===
     st.write("### Live Clean Data")
     st.dataframe(st.session_state.clean_df)
